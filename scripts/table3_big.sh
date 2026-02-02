@@ -1,5 +1,6 @@
 #!/bin/sh
 # table3_big.sh
+# bash scripts/table3_big.sh | tee logs/table3_big_$(date +%Y%m%d_%H%M).log
 
 VOCAB_DIR="artifacts_pretrained"
 NAME="table3_big"
@@ -7,6 +8,7 @@ CHECKPOINT_DIR="checkpoints/${NAME}"
 
 # Training (300,000 steps per paper)
 python demo_wmt14_pretrained.py \
+    --load_dir ${VOCAB_DIR} \
     --checkpoint_dir ${CHECKPOINT_DIR} \
     --d_model 1024 \
     --ffn_hidden 4096 \
