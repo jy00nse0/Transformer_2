@@ -1,5 +1,6 @@
 #!/bin/sh
 # table3_a_variations.sh
+# bash scripts/table3_a_variations.sh | tee logs/table3_a_$(date +%Y%m%d_%H%M).log
 
 VOCAB_DIR="artifacts_pretrained"
 # 각 실험별 설정을 배열로 정의 (실험명:헤드수)
