@@ -1,4 +1,6 @@
 #!/bin/bash
+# table3_c_size.sh
+# bash scripts/table3_c_size.sh | tee logs/table3_c_$(date +%Y%m%d_%H%M).log
 
 VOCAB_DIR="artifacts_pretrained"
 MAX_STEPS=100000
@@ -27,6 +29,7 @@ for exp in "${experiments[@]}"; do
 
     # 1. Training (H100 최적화: max_tokens 상향 및 gradient_checkpointing 적용)
     python demo_wmt14_pretrained.py \
+        --load_dir ${VOCAB_DIR} \
         --checkpoint_dir "${CHECKPOINT_DIR}" \
         --save_dir "${VOCAB_DIR}" \
         --n_layers "${N}" \
