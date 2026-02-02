@@ -363,6 +363,13 @@ def parse_args():
         help='Key dimension for MultiheadAttention (default: None, uses d_model)'
     )
     
+    parser.add_argument(
+        '--n_avg',
+        type=int,
+        default=5,
+        help='Number of checkpoints to average (default: 5 for base model, 20 for big model)'
+    )
+    
     return parser.parse_args()
 
 def main():
@@ -391,6 +398,7 @@ def main():
     print(f"  drop_prob: {args.drop_prob}")
     print(f"  label_smoothing: {args.label_smoothing}")
     print(f"  kdim: {args.kdim if args.kdim else 'None (uses d_model)'}")
+    print(f"  n_avg: {args.n_avg} (checkpoints to average)")
     
     # ------------------------------------------------------------------------
     # 1. 데이터셋 로드
@@ -616,6 +624,11 @@ def main():
     running_loss = 0.0
     best_val_loss = float('inf')
     
+    # Checkpoint averaging variables (논문 구현)
+    # 학습 종료 전 10분 간격으로 체크포인트 저장
+    last_checkpoint_save_count = 1  # 저장된 "last" 체크포인트 개수 추적
+    checkpoint_save_threshold = {}  # 중복 저장 방지용 딕셔너리
+    
     print(f"\n{'='*80}")
     print(f"Starting training...")
     print(f"{'='*80}\n")
@@ -674,6 +687,38 @@ def main():
                       f"ETA: {eta_hours:.1f}h")
                 
                 running_loss = 0.0
+            
+            # ========================================================
+            # 논문 구현: 10분 간격 체크포인트 저장
+            # Save checkpoints at ~10 minute intervals before training ends
+            # ========================================================
+            if global_step >= 90000 and last_checkpoint_save_count < args.n_avg:
+                # Calculate threshold: 600 seconds * (n_avg - save_count)
+                threshold_seconds = 600 * (args.n_avg - last_checkpoint_save_count)
+                
+                # Check if we've reached this threshold and haven't saved it yet
+                if eta_seconds <= threshold_seconds and last_checkpoint_save_count not in checkpoint_save_threshold:
+                    checkpoint_name = f'model_last_{args.n_avg - last_checkpoint_save_count}.pt'
+                    checkpoint_path = checkpoint_dir / checkpoint_name
+                    
+                    print(f"\n  [논문 구현] 학습 종료 ~{threshold_seconds//60}분 전 체크포인트 저장...")
+                    print(f"  ETA: {eta_seconds/60:.1f}분, 임계값: {threshold_seconds/60:.1f}분")
+                    
+                    torch.save({
+                        'step': global_step,
+                        'epoch': epoch,
+                        'model_state_dict': model.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'scheduler_state_dict': scheduler.state_dict(),
+                        'model_config': model_config,
+                    }, checkpoint_path)
+                    
+                    print(f"  ✓ 체크포인트 저장: {checkpoint_path}")
+                    
+                    # Mark this threshold as saved to prevent duplicates
+                    checkpoint_save_threshold[last_checkpoint_save_count] = True
+                    last_checkpoint_save_count += 1
+                    print()
             
             # ========================================================
             # 체크포인트 저장 (매 N steps)
@@ -743,7 +788,7 @@ def main():
     print(f"Best validation loss: {best_val_loss:.4f}")
     print(f"Average speed: {global_step/total_time:.2f} steps/s")
     
-    # Final checkpoint
+    # Final checkpoint (기존 방식)
     final_checkpoint_path = checkpoint_dir / 'model_final.pt'
     torch.save({
         'step': global_step,
@@ -756,6 +801,19 @@ def main():
     }, final_checkpoint_path)
     print(f"\n✓ Final checkpoint saved: {final_checkpoint_path}")
     
+    # Save final model as model_last_0.pt (논문 구현)
+    final_last_checkpoint_path = checkpoint_dir / 'model_last_0.pt'
+    torch.save({
+        'step': global_step,
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'scheduler_state_dict': scheduler.state_dict(),
+        'best_val_loss': best_val_loss,
+        'model_config': model_config,
+    }, final_last_checkpoint_path)
+    print(f"✓ Final checkpoint saved as (논문 구현): {final_last_checkpoint_path}")
+    
     # ================================================================
     # Checkpoint Averaging (논문 명세)
     # "For the base models, we used a single model obtained by 
@@ -766,18 +824,20 @@ def main():
     try:
         from checkpoint_averaging import average_last_n_checkpoints
         
-        # Base model: 5 checkpoints, Big model: 20 checkpoints
-        n_avg = 5
+        # 논문 구현: 10분 간격으로 저장된 model_last_*.pt 파일들을 평균화
+        # Base model: n_avg=5, Big model: n_avg=20
         
         averaged_state_dict = average_last_n_checkpoints(
             checkpoint_dir=checkpoint_dir,
-            n=n_avg,
-            output_path=checkpoint_dir / f'model_averaged_last{n_avg}.pt',
-            pattern='model_step_*.pt'
+            n=args.n_avg,
+            output_path=checkpoint_dir / f'model_averaged_last{args.n_avg}.pt',
+            pattern='model_last_*.pt'  # 논문 구현: 10분 간격 체크포인트 사용
         )
         
-        print(f"✓ Averaged model saved!")
-        print(f"  Use this for inference: {checkpoint_dir}/model_averaged_last{n_avg}.pt")
+        print(f"✓ Averaged model saved (논문 구현)!")
+        print(f"  평균화된 체크포인트 개수: {args.n_avg}")
+        print(f"  사용된 파일 패턴: model_last_*.pt")
+        print(f"  Use this for inference: {checkpoint_dir}/model_averaged_last{args.n_avg}.pt")
         print(f"  Command: python inference.py --checkpoint_dir {checkpoint_dir}")
         
     except Exception as e:
