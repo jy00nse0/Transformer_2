@@ -238,8 +238,8 @@ def translate_dataset(model, dataset, beam_search, vocab_data, args):
         example = dataset[idx]
         
         # Get source sentence
-        src_text = example.src if hasattr(example, 'src') else str(example[0])
-        trg_text = example.trg if hasattr(example, 'trg') else str(example[1])
+        src_text = example.src if hasattr(example, 'src') else str(example)
+        trg_text = example.trg if hasattr(example, 'trg') else str(example)
         
         # Tokenize source (you'll need to use your tokenizer here)
         # For now, assume it's already tokenized in the dataset
