@@ -122,3 +122,4 @@ class DecoderLayer(nn.Module):
         x = self.norm3(residual + self.dropout3(x))
         
         return x
+
